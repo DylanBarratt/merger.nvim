@@ -2,12 +2,57 @@
 ---@field current number
 ---@field incoming number
 ---@field base number
+---
 
-local CONFLICT_MARKER_START = "<<<<<<<"
-local CONFLICT_MARKER_END = ">>>>>>>"
-local PARENT_MARKER = "|||||||"
-local CONFLICT_MIDDLE = "======="
+---@class Conflict
+---@field lineNum number
+---@field incoming string
+---@field current string
+---@field base string
 
+local function searchBuffer(buffNum)
+  local CONFLICT_MARKER_START = "<<<<<<<"
+  local CONFLICT_MARKER_END = ">>>>>>>"
+  local PARENT_MARKER = "|||||||"
+  local CONFLICT_MIDDLE = "======="
+
+  ---@type Conflict[]
+  local conflicts = {}
+
+  local lineNum = 0
+  ---@type "none" | "current" | "base" | "incoming"
+  local curPart = "none"
+  while lineNum <= vim.api.nvim_buf_line_count(buffNum) - 1 do
+    local curLine = vim.api.nvim_buf_get_lines(buffNum, lineNum, lineNum + 1, false)[1]
+
+    if curLine:match(CONFLICT_MARKER_START) then
+      -- New conflict found
+      if curPart == "none" then
+        table.insert(conflicts, { lineNum = lineNum })
+      end
+
+      curPart = "current"
+    elseif curLine:match(PARENT_MARKER) then
+      curPart = "base"
+    elseif curLine:match(CONFLICT_MIDDLE) then
+      curPart = "incoming"
+    elseif curLine:match(CONFLICT_MARKER_END) then
+      curPart = "none"
+    else
+      if curPart ~= "none" then
+        if conflicts[#conflicts][curPart] == nil then
+          conflicts[#conflicts][curPart] = { curLine }
+        else
+          table.insert(conflicts[#conflicts][curPart], curLine)
+        end
+      end
+    end
+
+    lineNum = lineNum + 1
+  end
+
+  vim.print(conflicts)
+end
 ---@param buffers Buffers
 ---@return number[]
 local function createWindows(buffers)
@@ -85,6 +130,8 @@ function Main()
   }
 
   populateBuffers(buffers)
+
+  searchBuffer(0)
 
   local windows = createWindows(buffers)
 
