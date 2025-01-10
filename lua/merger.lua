@@ -2,13 +2,15 @@
 ---@field current number
 ---@field incoming number
 ---@field base number
----
+---@field startFile number
 
 ---@class Conflict
 ---@field lineNum number
 ---@field incoming string
 ---@field current string
 ---@field base string
+
+--------------------------------------------------------------------------------
 
 local function searchBuffer(buffNum)
   local CONFLICT_MARKER_START = "<<<<<<<"
@@ -23,7 +25,8 @@ local function searchBuffer(buffNum)
   ---@type "none" | "current" | "base" | "incoming"
   local curPart = "none"
   while lineNum <= vim.api.nvim_buf_line_count(buffNum) - 1 do
-    local curLine = vim.api.nvim_buf_get_lines(buffNum, lineNum, lineNum + 1, false)[1]
+    local curLine =
+      vim.api.nvim_buf_get_lines(buffNum, lineNum, lineNum + 1, false)[1]
 
     if curLine:match(CONFLICT_MARKER_START) then
       -- New conflict found
@@ -50,8 +53,6 @@ local function searchBuffer(buffNum)
 
     lineNum = lineNum + 1
   end
-
-  vim.print(conflicts)
 end
 ---@param buffers Buffers
 ---@return number[]
@@ -72,7 +73,14 @@ local function createWindows(buffers)
   end
 
   local wins = {
-    create_float(buffers.incoming, false, 0, 0, math.floor(editor_width / 2), math.floor(editor_height / 2)),
+    create_float(
+      buffers.incoming,
+      false,
+      0,
+      0,
+      math.floor(editor_width / 2),
+      math.floor(editor_height / 2)
+    ),
     create_float(
       buffers.current,
       false,
@@ -102,9 +110,27 @@ local function populateBuffers(fileName, gitDir, buffers)
     vim.api.nvim_buf_set_lines(bufNr, 0, -1, false, content)
   end
 
-  setBuf(buffers.base, vim.split(vim.fn.system("git -C " .. gitDir .. " show :1:" .. fileName), "\n"))
-  setBuf(buffers.current, vim.split(vim.fn.system("git -C " .. gitDir .. " show :2:" .. fileName), "\n"))
-  setBuf(buffers.incoming, vim.split(vim.fn.system("git -C " .. gitDir .. " show :3:" .. fileName), "\n"))
+  setBuf(
+    buffers.base,
+    vim.split(
+      vim.fn.system("git -C " .. gitDir .. " show :1:" .. fileName),
+      "\n"
+    )
+  )
+  setBuf(
+    buffers.current,
+    vim.split(
+      vim.fn.system("git -C " .. gitDir .. " show :2:" .. fileName),
+      "\n"
+    )
+  )
+  setBuf(
+    buffers.incoming,
+    vim.split(
+      vim.fn.system("git -C " .. gitDir .. " show :3:" .. fileName),
+      "\n"
+    )
+  )
 end
 
 ---@param windows number[]
@@ -123,17 +149,21 @@ local function cleanup(windows)
   })
 end
 
+--------------------------------------------------------------------------------
+
 function Main()
   ---@type Buffers
   local buffers = {
     current = vim.api.nvim_create_buf(false, true),
     incoming = vim.api.nvim_create_buf(false, true),
     base = vim.api.nvim_create_buf(false, true),
+    startFile = vim.api.nvim_get_current_buf(),
   }
 
   local startFileName = vim.fn.expand("%:t")
-  local gitDir =
-    vim.fn.system("git -C " .. vim.fn.expand("%:p:h") .. " rev-parse --show-toplevel"):gsub("\n", "")
+  local gitDir = vim.fn
+    .system("git -C " .. vim.fn.expand("%:p:h") .. " rev-parse --show-toplevel")
+    :gsub("\n", "")
 
   if gitDir == "" then
     print("Merger.nvim error: git repo not found")
@@ -142,12 +172,14 @@ function Main()
 
   populateBuffers(startFileName, gitDir, buffers)
 
-  searchBuffer(0)
+  searchBuffer(buffers.startFile)
 
   local windows = createWindows(buffers)
 
   cleanup(windows)
 end
+
+--------------------------------------------------------------------------------
 
 local M = {}
 
