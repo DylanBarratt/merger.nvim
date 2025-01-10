@@ -94,15 +94,17 @@ local function createWindows(buffers)
   return wins
 end
 
+---@param fileName string
+---@param gitDir string
 ---@param buffers Buffers
-local function populateBuffers(buffers)
+local function populateBuffers(fileName, gitDir, buffers)
   local function setBuf(bufNr, content)
     vim.api.nvim_buf_set_lines(bufNr, 0, -1, false, content)
   end
 
-  setBuf(buffers.base, vim.split(vim.fn.system("git show :1:file1.txt"), "\n"))
-  setBuf(buffers.current, vim.split(vim.fn.system("git show :2:file1.txt"), "\n"))
-  setBuf(buffers.incoming, vim.split(vim.fn.system("git show :3:file1.txt"), "\n"))
+  setBuf(buffers.base, vim.split(vim.fn.system("git -C " .. gitDir .. " show :1:" .. fileName), "\n"))
+  setBuf(buffers.current, vim.split(vim.fn.system("git -C " .. gitDir .. " show :2:" .. fileName), "\n"))
+  setBuf(buffers.incoming, vim.split(vim.fn.system("git -C " .. gitDir .. " show :3:" .. fileName), "\n"))
 end
 
 ---@param windows number[]
@@ -129,7 +131,16 @@ function Main()
     base = vim.api.nvim_create_buf(false, true),
   }
 
-  populateBuffers(buffers)
+  local startFileName = vim.fn.expand("%:t")
+  local gitDir =
+    vim.fn.system("git -C " .. vim.fn.expand("%:p:h") .. " rev-parse --show-toplevel"):gsub("\n", "")
+
+  if gitDir == "" then
+    print("Merger.nvim error: git repo not found")
+    return
+  end
+
+  populateBuffers(startFileName, gitDir, buffers)
 
   searchBuffer(0)
 
