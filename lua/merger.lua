@@ -4,11 +4,26 @@
 ---@field base number
 ---@field startFile number
 
+---@class Windows
+---@field current number
+---@field incoming number
+---@field base number
+
 ---@class Conflict
 ---@field lineNum number
 ---@field incoming string
 ---@field current string
 ---@field base string
+
+--------------------------------------------------------------------------------
+
+local function valuesOnly(tbl)
+  local values_only = {}
+  for _, value in pairs(tbl) do
+    table.insert(values_only, value)
+  end
+  return values_only
+end
 
 --------------------------------------------------------------------------------
 
@@ -55,7 +70,7 @@ local function searchBuffer(buffNum)
   end
 end
 ---@param buffers Buffers
----@return number[]
+---@return Windows
 local function createWindows(buffers)
   local editor_width = vim.o.columns
   local editor_height = vim.o.lines
@@ -72,8 +87,8 @@ local function createWindows(buffers)
     return vim.api.nvim_open_win(bufnr, enter, opts)
   end
 
-  local wins = {
-    create_float(
+  return {
+    incoming = create_float(
       buffers.incoming,
       false,
       0,
@@ -81,7 +96,7 @@ local function createWindows(buffers)
       math.floor(editor_width / 2),
       math.floor(editor_height / 2)
     ),
-    create_float(
+    current = create_float(
       buffers.current,
       false,
       0,
@@ -89,7 +104,7 @@ local function createWindows(buffers)
       math.floor(editor_width / 2),
       math.floor(editor_height / 2)
     ),
-    create_float(
+    base = create_float(
       buffers.base,
       true,
       math.floor(editor_height / 2),
@@ -98,8 +113,6 @@ local function createWindows(buffers)
       math.floor(editor_height / 2)
     ),
   }
-
-  return wins
 end
 
 ---@param fileName string
@@ -133,13 +146,30 @@ local function populateBuffers(fileName, gitDir, buffers)
   )
 end
 
----@param windows number[]
-local function cleanup(windows)
-  -- close other windows when one closes
+---@param windows Windows
+---@return number
+local function syncCursors(windows)
+  return vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+    callback = function()
+      local cursor_pos = vim.api.nvim_win_get_cursor(windows.base)
+
+      vim.api.nvim_win_set_cursor(windows.current, cursor_pos)
+      vim.api.nvim_win_set_cursor(windows.incoming, cursor_pos)
+    end,
+  })
+end
+
+---@param windows Windows
+---@param cursorAutoCmd number
+local function cleanup(windows, cursorAutoCmd)
+  -- cleanup when one win closes
   vim.api.nvim_create_autocmd("WinClosed", {
     callback = function(event)
-      if vim.tbl_contains(windows, tonumber(event.match)) then
-        for _, win_id in ipairs(windows) do
+      local wins = valuesOnly(windows)
+      if vim.tbl_contains(wins, tonumber(event.match)) then
+        vim.api.nvim_del_autocmd(cursorAutoCmd)
+
+        for _, win_id in ipairs(wins) do
           if vim.api.nvim_win_is_valid(win_id) then
             vim.api.nvim_win_close(win_id, true)
           end
@@ -176,7 +206,9 @@ function Main()
 
   local windows = createWindows(buffers)
 
-  cleanup(windows)
+  local cursorAutoCmd = syncCursors(windows)
+
+  cleanup(windows, cursorAutoCmd)
 end
 
 --------------------------------------------------------------------------------
