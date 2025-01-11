@@ -169,19 +169,49 @@ end
 
 ---@param namespace number
 ---@param buffers Buffers
+---@param windows Windows
 ---@param conflicts Conflict[]
-local function highlightDiffs(namespace, buffers, conflicts)
-  local function highlightLine(buff, line)
-    vim.api.nvim_buf_add_highlight(buff, namespace, "Visual", line, 0, -1)
-  end
+local function highlightDiffs(namespace, buffers, windows, conflicts)
+  -- highlight whole section
+  -- local function highlightLine(buff, line)
+  --   vim.api.nvim_buf_add_highlight(buff, namespace, "Visual", line, 0, -1)
+  -- end
+  --
+  -- for x = 1, #conflicts do
+  --   for i = 0, #conflicts[x].incoming do
+  --     highlightLine(buffers.base, conflicts[x].lineNum + i)
+  --     highlightLine(buffers.incoming, conflicts[x].lineNum + i)
+  --     highlightLine(buffers.current, conflicts[x].lineNum + i)
+  --   end
+  -- end
 
-  for x = 1, #conflicts do
-    for i = 0, #conflicts[x].incoming do
-      highlightLine(buffers.base, conflicts[x].lineNum + i)
-      highlightLine(buffers.incoming, conflicts[x].lineNum + i)
-      highlightLine(buffers.current, conflicts[x].lineNum + i)
+  -- lines around diff
+  local function linesAround(buff, line, i)
+    -- HACK: repeat 1000 so that dashes always fill window
+    vim.api.nvim_buf_set_extmark(buff, namespace, line, 0, {
+      virt_lines = { { { "---" .. i .. string.rep("-", 1000), "Comment" } } },
+      virt_lines_above = true,
+    })
+    vim.api.nvim_buf_set_extmark(buff, namespace, line, 0, {
+      virt_lines = { { { string.rep("-", 1000), "Comment" } } },
+      virt_lines_above = false,
+    })
+  end
+  for i = 1, #conflicts do
+    linesAround(buffers.current, conflicts[i].lineNum, i)
+    linesAround(buffers.incoming, conflicts[i].lineNum, i)
+
+    if conflicts[i].lineNum == 0 then
+      -- HACK: virtual lines on line 0 are hidden without this :/
+      vim.api.nvim_set_current_win(windows.current)
+      vim.fn.winrestview({ topfill = 1 })
+      vim.api.nvim_set_current_win(windows.incoming)
+      vim.fn.winrestview({ topfill = 1 })
+      vim.api.nvim_set_current_win(windows.base)
     end
   end
+
+  -- highlight character diffs
 end
 
 ---@param windows Windows
@@ -235,7 +265,7 @@ function Main()
 
   local cursorAutoCmd = syncCursors(windows)
 
-  highlightDiffs(namespace, buffers, conflicts)
+  highlightDiffs(namespace, buffers, windows, conflicts)
 
   cleanup(windows, cursorAutoCmd)
 end
