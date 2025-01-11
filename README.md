@@ -7,10 +7,6 @@
 ## Options
 
 ## TODO
-- Highlight the whole diff
-    - for current
-    - incoming
-    - ignore (keep base)
 - Highlight diff text
     - for current
     - incoming

@@ -11,9 +11,9 @@
 
 ---@class Conflict
 ---@field lineNum number
----@field incoming string
----@field current string
----@field base string
+---@field incoming string[]
+---@field current string[]
+---@field base string[]
 
 --------------------------------------------------------------------------------
 
@@ -27,6 +27,8 @@ end
 
 --------------------------------------------------------------------------------
 
+---@param buffNum number
+---@return Conflict[]
 local function searchBuffer(buffNum)
   local CONFLICT_MARKER_START = "<<<<<<<"
   local CONFLICT_MARKER_END = ">>>>>>>"
@@ -37,6 +39,7 @@ local function searchBuffer(buffNum)
   local conflicts = {}
 
   local lineNum = 0
+  local relativeLineNum = 0 -- line num without conflict markers
   ---@type "none" | "current" | "base" | "incoming"
   local curPart = "none"
   while lineNum <= vim.api.nvim_buf_line_count(buffNum) - 1 do
@@ -46,7 +49,8 @@ local function searchBuffer(buffNum)
     if curLine:match(CONFLICT_MARKER_START) then
       -- New conflict found
       if curPart == "none" then
-        table.insert(conflicts, { lineNum = lineNum })
+        table.insert(conflicts, { lineNum = relativeLineNum })
+        relativeLineNum = relativeLineNum + 1
       end
 
       curPart = "current"
@@ -63,11 +67,15 @@ local function searchBuffer(buffNum)
         else
           table.insert(conflicts[#conflicts][curPart], curLine)
         end
+      else
+        relativeLineNum = relativeLineNum + 1 -- only increment when not in conflict
       end
     end
 
     lineNum = lineNum + 1
   end
+
+  return conflicts
 end
 ---@param buffers Buffers
 ---@return Windows
@@ -159,6 +167,23 @@ local function syncCursors(windows)
   })
 end
 
+---@param namespace number
+---@param buffers Buffers
+---@param conflicts Conflict[]
+local function highlightDiffs(namespace, buffers, conflicts)
+  local function highlightLine(buff, line)
+    vim.api.nvim_buf_add_highlight(buff, namespace, "Visual", line, 0, -1)
+  end
+
+  for x = 1, #conflicts do
+    for i = 0, #conflicts[x].incoming do
+      highlightLine(buffers.base, conflicts[x].lineNum + i)
+      highlightLine(buffers.incoming, conflicts[x].lineNum + i)
+      highlightLine(buffers.current, conflicts[x].lineNum + i)
+    end
+  end
+end
+
 ---@param windows Windows
 ---@param cursorAutoCmd number
 local function cleanup(windows, cursorAutoCmd)
@@ -190,6 +215,8 @@ function Main()
     startFile = vim.api.nvim_get_current_buf(),
   }
 
+  local namespace = vim.api.nvim_create_namespace("Merger")
+
   local startFileName = vim.fn.expand("%:t")
   local gitDir = vim.fn
     .system("git -C " .. vim.fn.expand("%:p:h") .. " rev-parse --show-toplevel")
@@ -202,11 +229,13 @@ function Main()
 
   populateBuffers(startFileName, gitDir, buffers)
 
-  searchBuffer(buffers.startFile)
+  local conflicts = searchBuffer(buffers.startFile)
 
   local windows = createWindows(buffers)
 
   local cursorAutoCmd = syncCursors(windows)
+
+  highlightDiffs(namespace, buffers, conflicts)
 
   cleanup(windows, cursorAutoCmd)
 end
