@@ -185,33 +185,90 @@ local function highlightDiffs(namespace, buffers, windows, conflicts)
   --   end
   -- end
 
-  -- lines around diff
-  local function linesAround(buff, line, i)
+  local function linesAround(buff, line, len, i)
     -- HACK: repeat 1000 so that dashes always fill window
     vim.api.nvim_buf_set_extmark(buff, namespace, line, 0, {
-      virt_lines = { { { "---" .. i .. string.rep("-", 1000), "Comment" } } },
+      virt_lines = { { { "---" .. i .. string.rep("-", 1000), "DiffText" } } },
       virt_lines_above = true,
     })
-    vim.api.nvim_buf_set_extmark(buff, namespace, line, 0, {
-      virt_lines = { { { string.rep("-", 1000), "Comment" } } },
+
+    local name = (buff == buffers.current) and "current" or "incoming"
+    vim.api.nvim_buf_set_extmark(buff, namespace, line + len - 1, 0, {
+      virt_lines = {
+        { { "---" .. name .. string.rep("-", 1000), "DiffText" } },
+      },
       virt_lines_above = false,
     })
   end
-  for i = 1, #conflicts do
-    linesAround(buffers.current, conflicts[i].lineNum, i)
-    linesAround(buffers.incoming, conflicts[i].lineNum, i)
 
-    if conflicts[i].lineNum == 0 then
-      -- HACK: virtual lines on line 0 are hidden without this :/
+  local function highlightChar(line, char)
+    vim.api.nvim_buf_add_highlight(
+      buffers.incoming,
+      namespace,
+      "DiffAdd",
+      line - 1,
+      char - 1,
+      char
+    )
+    vim.api.nvim_buf_add_highlight(
+      buffers.current,
+      namespace,
+      "DiffAdd",
+      line - 1,
+      char - 1,
+      char
+    )
+  end
+
+  for curConf = 1, #conflicts do
+    linesAround(
+      buffers.current,
+      conflicts[curConf].lineNum,
+      #conflicts[curConf].current,
+      curConf
+    )
+    linesAround(
+      buffers.incoming,
+      conflicts[curConf].lineNum,
+      #conflicts[curConf].incoming,
+      curConf
+    )
+
+    -- HACK: virtual lines on line 0 are hidden without this :/
+    if conflicts[curConf].lineNum == 0 then
       vim.api.nvim_set_current_win(windows.current)
       vim.fn.winrestview({ topfill = 1 })
       vim.api.nvim_set_current_win(windows.incoming)
       vim.fn.winrestview({ topfill = 1 })
       vim.api.nvim_set_current_win(windows.base)
     end
-  end
 
-  -- highlight character diffs
+    -- highlight character diffs
+    for curLine = 1, math.max(#conflicts[curConf].current, #conflicts[curConf].incoming) do
+      local line1 = conflicts[curConf].current[curLine] or ""
+      local line2 = conflicts[curConf].incoming[curLine] or ""
+
+      if line1 == "" and line2 == "" then
+        goto continue
+      end
+
+      for curChar = 1, math.max(#line1, #line2) do
+        local char1 = line1:sub(curChar, curChar)
+        local char2 = line2:sub(curChar, curChar)
+
+        if char1 ~= char2 then
+          if curChar <= #line1 then
+            highlightChar(conflicts[curConf].lineNum + curLine, curChar)
+          end
+          if curChar <= #line2 then
+            highlightChar(conflicts[curConf].lineNum + curLine, curChar)
+          end
+        end
+      end
+
+      ::continue::
+    end
+  end
 end
 
 ---@param windows Windows
