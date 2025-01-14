@@ -274,31 +274,41 @@ end
 ---@param conflicts Conflict[]
 ---@param windows Windows
 local function navigation(conflicts, windows)
-  local currentConflict = 1
+  local function find_next_line()
+    local next_line = nil
+
+    for i = 1, #conflicts, 1 do
+      if
+        conflicts[i].lineNum > vim.api.nvim_win_get_cursor(0)[1] - 1
+        and (not next_line or conflicts[i].lineNum < next_line)
+      then
+        next_line = conflicts[i].lineNum
+      end
+    end
+
+    return next_line == nil and conflicts[1].lineNum or next_line
+  end
+
+  local function find_prev_line()
+    local prev_line = nil
+
+    for i = 1, #conflicts, 1 do
+      if
+        conflicts[i].lineNum < vim.api.nvim_win_get_cursor(0)[1] - 1
+        and (not prev_line or conflicts[i].lineNum > prev_line)
+      then
+        prev_line = conflicts[i].lineNum
+      end
+    end
+
+    return prev_line == nil and conflicts[#conflicts].lineNum or prev_line
+  end
 
   vim.keymap.set("n", "]c", function()
-    if currentConflict < #conflicts then
-      currentConflict = currentConflict + 1
-    else
-      currentConflict = 1
-    end
-
-    vim.api.nvim_win_set_cursor(
-      windows.base,
-      { conflicts[currentConflict].lineNum + 1, 0 }
-    )
+    vim.api.nvim_win_set_cursor(windows.base, { find_next_line() + 1, 0 })
   end, { desc = "next conflict" })
   vim.keymap.set("n", "[c", function()
-    if currentConflict > 1 then
-      currentConflict = currentConflict - 1
-    else
-      currentConflict = #conflicts
-    end
-
-    vim.api.nvim_win_set_cursor(
-      windows.base,
-      { conflicts[currentConflict].lineNum + 1, 0 }
-    )
+    vim.api.nvim_win_set_cursor(windows.base, { find_prev_line() + 1, 0 })
   end, { desc = "previous conflict" })
 end
 
