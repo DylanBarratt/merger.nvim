@@ -271,6 +271,37 @@ local function highlightDiffs(namespace, buffers, windows, conflicts)
   end
 end
 
+---@param conflicts Conflict[]
+---@param windows Windows
+local function navigation(conflicts, windows)
+  local currentConflict = 1
+
+  vim.keymap.set("n", "]c", function()
+    if currentConflict < #conflicts then
+      currentConflict = currentConflict + 1
+    else
+      currentConflict = 1
+    end
+
+    vim.api.nvim_win_set_cursor(
+      windows.base,
+      { conflicts[currentConflict].lineNum + 1, 0 }
+    )
+  end, { desc = "next conflict" })
+  vim.keymap.set("n", "[c", function()
+    if currentConflict > 1 then
+      currentConflict = currentConflict - 1
+    else
+      currentConflict = #conflicts
+    end
+
+    vim.api.nvim_win_set_cursor(
+      windows.base,
+      { conflicts[currentConflict].lineNum + 1, 0 }
+    )
+  end, { desc = "previous conflict" })
+end
+
 ---@param windows Windows
 ---@param cursorAutoCmd number
 local function cleanup(windows, cursorAutoCmd)
@@ -320,9 +351,16 @@ function Main()
 
   local windows = createWindows(buffers)
 
+  -- set the cursor to the first conflict
+  vim.api.nvim_win_set_cursor(windows.base, { conflicts[1].lineNum + 1, 0 })
+  vim.api.nvim_win_set_cursor(windows.incoming, { conflicts[1].lineNum + 1, 0 })
+  vim.api.nvim_win_set_cursor(windows.current, { conflicts[1].lineNum + 1, 0 })
+
   local cursorAutoCmd = syncCursors(windows)
 
   highlightDiffs(namespace, buffers, windows, conflicts)
+
+  navigation(conflicts, windows)
 
   cleanup(windows, cursorAutoCmd)
 end
