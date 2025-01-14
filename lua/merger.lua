@@ -26,6 +26,12 @@ local function valuesOnly(tbl)
 end
 
 --------------------------------------------------------------------------------
+--- GLOBALS
+
+---@type Conflict
+local currentConflict = nil
+
+--------------------------------------------------------------------------------
 
 ---@param buffNum number
 ---@return Conflict[]
@@ -305,7 +311,7 @@ end
 ---@param windows Windows
 local function navigation(conflicts, windows)
   ---@return Conflict
-  local function find_next_conflict()
+  local function find_next_coflict()
     ---@type Conflict
     local next_conflict = nil
 
@@ -338,7 +344,7 @@ local function navigation(conflicts, windows)
   end
 
   vim.keymap.set("n", "]c", function()
-    currentConflict = find_next_conflict()
+    currentConflict = find_next_coflict()
     vim.api.nvim_win_set_cursor(
       windows.base,
       { currentConflict.lineNum + 1, 0 }
