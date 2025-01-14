@@ -7,8 +7,10 @@
 ## Options
 
 ## TODO
-- allow user to select incoming, current or base and have it put in base
-- selection comes from the currently navigated conflict
+- should the conflict just come from the current conflict the cursor is over? if not in a conflict then error?
 - complete readme
 - write docs
+- user options
+    - navigation keys
+    - colours?
 

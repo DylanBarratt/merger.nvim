@@ -26,6 +26,12 @@ local function valuesOnly(tbl)
 end
 
 --------------------------------------------------------------------------------
+--- GLOBALS
+
+---@type Conflict
+local currentConflict = nil
+
+--------------------------------------------------------------------------------
 
 ---@param buffNum number
 ---@return Conflict[]
@@ -271,55 +277,100 @@ local function highlightDiffs(namespace, buffers, windows, conflicts)
   end
 end
 
+---@param buffers Buffers
+local function userCommands(buffers)
+  vim.api.nvim_create_user_command("Merger", function(event)
+    if event.args == "current" then
+      vim.api.nvim_buf_set_lines(
+        buffers.base,
+        currentConflict.lineNum,
+        currentConflict.lineNum + #currentConflict.current,
+        false,
+        currentConflict.current
+      )
+    elseif event.args == "incoming" then
+      vim.api.nvim_buf_set_lines(
+        buffers.base,
+        currentConflict.lineNum,
+        currentConflict.lineNum + #currentConflict.incoming,
+        false,
+        currentConflict.incoming
+      )
+    else
+      print("incorrect argument, please use current, incoming, or parent")
+    end
+  end, {
+    complete = function()
+      return { "current", "incoming" }
+    end,
+    nargs = 1,
+  })
+end
+
 ---@param conflicts Conflict[]
 ---@param windows Windows
 local function navigation(conflicts, windows)
-  local function find_next_line()
-    local next_line = nil
+  ---@return Conflict
+  local function find_next_coflict()
+    ---@type Conflict
+    local next_conflict = nil
 
     for i = 1, #conflicts, 1 do
       if
         conflicts[i].lineNum > vim.api.nvim_win_get_cursor(0)[1] - 1
-        and (not next_line or conflicts[i].lineNum < next_line)
+        and (not next_conflict or conflicts[i].lineNum < next_conflict.lineNum)
       then
-        next_line = conflicts[i].lineNum
+        next_conflict = conflicts[i]
       end
     end
 
-    return next_line == nil and conflicts[1].lineNum or next_line
+    return next_conflict == nil and conflicts[1] or next_conflict
   end
 
-  local function find_prev_line()
-    local prev_line = nil
+  local function find_prev_conflict()
+    ---@type Conflict
+    local prev_conflict = nil
 
     for i = 1, #conflicts, 1 do
       if
         conflicts[i].lineNum < vim.api.nvim_win_get_cursor(0)[1] - 1
-        and (not prev_line or conflicts[i].lineNum > prev_line)
+        and (not prev_conflict or conflicts[i].lineNum > prev_conflict.lineNum)
       then
-        prev_line = conflicts[i].lineNum
+        prev_conflict = conflicts[i]
       end
     end
 
-    return prev_line == nil and conflicts[#conflicts].lineNum or prev_line
+    return prev_conflict == nil and conflicts[#conflicts] or prev_conflict
   end
 
   vim.keymap.set("n", "]c", function()
-    vim.api.nvim_win_set_cursor(windows.base, { find_next_line() + 1, 0 })
+    currentConflict = find_next_coflict()
+    vim.api.nvim_win_set_cursor(
+      windows.base,
+      { currentConflict.lineNum + 1, 0 }
+    )
   end, { desc = "next conflict" })
   vim.keymap.set("n", "[c", function()
-    vim.api.nvim_win_set_cursor(windows.base, { find_prev_line() + 1, 0 })
+    currentConflict = find_prev_conflict()
+    vim.api.nvim_win_set_cursor(
+      windows.base,
+      { currentConflict.lineNum + 1, 0 }
+    )
   end, { desc = "previous conflict" })
 end
 
 ---@param windows Windows
 ---@param cursorAutoCmd number
-local function cleanup(windows, cursorAutoCmd)
+---@param buffers Buffers
+local function cleanup(windows, cursorAutoCmd, buffers)
   -- cleanup when one win closes
   vim.api.nvim_create_autocmd("WinClosed", {
     callback = function(event)
       local wins = valuesOnly(windows)
       if vim.tbl_contains(wins, tonumber(event.match)) then
+        -- TODO: save final base state
+        vim.print(vim.api.nvim_buf_get_lines(buffers.base, 0, -1, false))
+
         vim.api.nvim_del_autocmd(cursorAutoCmd)
 
         for _, win_id in ipairs(wins) do
@@ -358,6 +409,7 @@ function Main()
   populateBuffers(startFileName, gitDir, buffers)
 
   local conflicts = searchBuffer(buffers.startFile)
+  currentConflict = conflicts[1]
 
   local windows = createWindows(buffers)
 
@@ -370,9 +422,11 @@ function Main()
 
   highlightDiffs(namespace, buffers, windows, conflicts)
 
+  userCommands(buffers)
+
   navigation(conflicts, windows)
 
-  cleanup(windows, cursorAutoCmd)
+  cleanup(windows, cursorAutoCmd, buffers)
 end
 
 --------------------------------------------------------------------------------
