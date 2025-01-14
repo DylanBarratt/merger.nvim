@@ -16,7 +16,9 @@
 ---@field base string[]
 
 --------------------------------------------------------------------------------
+-- HELPER FUNCTIONS
 
+---@return table
 local function valuesOnly(tbl)
   local values_only = {}
   for _, value in pairs(tbl) do
@@ -24,12 +26,6 @@ local function valuesOnly(tbl)
   end
   return values_only
 end
-
---------------------------------------------------------------------------------
---- GLOBALS
-
----@type Conflict
-local currentConflict = nil
 
 --------------------------------------------------------------------------------
 
@@ -278,30 +274,41 @@ local function highlightDiffs(namespace, buffers, windows, conflicts)
 end
 
 ---@param buffers Buffers
-local function userCommands(buffers)
+---@param conflicts Conflict[]
+local function userCommands(buffers, conflicts)
   vim.api.nvim_create_user_command("Merger", function(event)
-    if event.args == "current" then
-      vim.api.nvim_buf_set_lines(
-        buffers.base,
-        currentConflict.lineNum,
-        currentConflict.lineNum + #currentConflict.current,
-        false,
-        currentConflict.current
+    if
+      event.args ~= "current"
+      and event.args ~= "incoming"
+      and event.args ~= "base"
+    then
+      print(
+        "incorrect "
+          .. event.args
+          .. ", please use current, incoming, or parent"
       )
-    elseif event.args == "incoming" then
-      vim.api.nvim_buf_set_lines(
-        buffers.base,
-        currentConflict.lineNum,
-        currentConflict.lineNum + #currentConflict.incoming,
-        false,
-        currentConflict.incoming
-      )
-    else
-      print("incorrect argument, please use current, incoming, or parent")
+      return
+    end
+
+    for i = 1, #conflicts, 1 do
+      local curLineNum = vim.api.nvim_win_get_cursor(0)[1]
+      if
+        curLineNum >= conflicts[i].lineNum
+        and curLineNum <= conflicts[i].lineNum + #conflicts[i][event.args]
+      then
+        vim.api.nvim_buf_set_lines(
+          buffers.base,
+          conflicts[i].lineNum,
+          conflicts[i].lineNum + #conflicts[i][event.args],
+          false,
+          conflicts[i][event.args]
+        )
+        break
+      end
     end
   end, {
     complete = function()
-      return { "current", "incoming" }
+      return { "current", "incoming", "base" }
     end,
     nargs = 1,
   })
@@ -311,7 +318,7 @@ end
 ---@param windows Windows
 local function navigation(conflicts, windows)
   ---@return Conflict
-  local function find_next_coflict()
+  local function find_next_conflict()
     ---@type Conflict
     local next_conflict = nil
 
@@ -327,6 +334,7 @@ local function navigation(conflicts, windows)
     return next_conflict == nil and conflicts[1] or next_conflict
   end
 
+  ---@return Conflict
   local function find_prev_conflict()
     ---@type Conflict
     local prev_conflict = nil
@@ -344,17 +352,15 @@ local function navigation(conflicts, windows)
   end
 
   vim.keymap.set("n", "]c", function()
-    currentConflict = find_next_coflict()
     vim.api.nvim_win_set_cursor(
       windows.base,
-      { currentConflict.lineNum + 1, 0 }
+      { find_next_conflict().lineNum + 1, 0 }
     )
   end, { desc = "next conflict" })
   vim.keymap.set("n", "[c", function()
-    currentConflict = find_prev_conflict()
     vim.api.nvim_win_set_cursor(
       windows.base,
-      { currentConflict.lineNum + 1, 0 }
+      { find_prev_conflict().lineNum + 1, 0 }
     )
   end, { desc = "previous conflict" })
 end
@@ -409,7 +415,6 @@ function Main()
   populateBuffers(startFileName, gitDir, buffers)
 
   local conflicts = searchBuffer(buffers.startFile)
-  currentConflict = conflicts[1]
 
   local windows = createWindows(buffers)
 
@@ -422,7 +427,7 @@ function Main()
 
   highlightDiffs(namespace, buffers, windows, conflicts)
 
-  userCommands(buffers)
+  userCommands(buffers, conflicts)
 
   navigation(conflicts, windows)
 
