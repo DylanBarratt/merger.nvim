@@ -1,12 +1,16 @@
 ---@class Buffers
 ---@field current number
+---@field currentInfo number
 ---@field incoming number
+---@field incomingInfo number
 ---@field base number
 ---@field startFile number
 
 ---@class Windows
 ---@field current number
+---@field currentInfo number
 ---@field incoming number
+---@field incomingInfo number
 ---@field base number
 
 ---@class Conflict
@@ -94,7 +98,7 @@ local function createWindows(buffers)
   local editor_width = vim.o.columns
   local editor_height = vim.o.lines
 
-  local function create_float(bufnr, enter, top, left, width, height)
+  local function createFloat(bufnr, enter, top, left, width, height)
     local opts = {
       relative = "editor",
       row = top,
@@ -106,24 +110,54 @@ local function createWindows(buffers)
     return vim.api.nvim_open_win(bufnr, enter, opts)
   end
 
+  local function createInfoLine(bufnr, enter, top, left, width, height)
+    local opts = {
+      relative = "editor",
+      row = top,
+      col = left,
+      width = width,
+      height = height,
+      focusable = false,
+      style = "minimal",
+    }
+
+    return vim.api.nvim_open_win(bufnr, enter, opts)
+  end
+
   return {
-    incoming = create_float(
+    incoming = createFloat(
       buffers.incoming,
       false,
-      0,
+      1,
       0,
       math.floor(editor_width / 2),
       math.floor(editor_height / 2)
     ),
-    current = create_float(
+    incomingInfo = createInfoLine(
+      buffers.incomingInfo,
+      false,
+      0,
+      0,
+      math.floor(editor_width / 2),
+      1
+    ),
+    current = createFloat(
       buffers.current,
+      false,
+      1,
+      math.floor(editor_width / 2),
+      math.floor(editor_width / 2),
+      math.floor(editor_height / 2)
+    ),
+    currentInfo = createInfoLine(
+      buffers.currentInfo,
       false,
       0,
       math.floor(editor_width / 2),
       math.floor(editor_width / 2),
-      math.floor(editor_height / 2)
+      1
     ),
-    base = create_float(
+    base = createFloat(
       buffers.base,
       true,
       math.floor(editor_height / 2),
@@ -141,6 +175,9 @@ local function populateBuffers(fileName, gitDir, buffers)
   local function setBuf(bufNr, content)
     vim.api.nvim_buf_set_lines(bufNr, 0, -1, false, content)
   end
+
+  setBuf(buffers.currentInfo, { " Current" })
+  setBuf(buffers.incomingInfo, { " Incoming" })
 
   setBuf(
     buffers.base,
@@ -416,7 +453,9 @@ function Main()
 
   ---@type Buffers
   local buffers = {
+    currentInfo = vim.api.nvim_create_buf(false, true),
     current = vim.api.nvim_create_buf(false, true),
+    incomingInfo = vim.api.nvim_create_buf(false, true),
     incoming = vim.api.nvim_create_buf(false, true),
     base = vim.api.nvim_create_buf(false, true),
     startFile = vim.api.nvim_get_current_buf(),
