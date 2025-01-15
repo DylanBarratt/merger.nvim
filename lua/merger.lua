@@ -199,14 +199,15 @@ local function highlightDiffs(namespace, buffers, windows, conflicts)
   local function linesAround(buff, line, len, i)
     -- HACK: repeat 1000 so that dashes always fill window
     vim.api.nvim_buf_set_extmark(buff, namespace, line, 0, {
-      virt_lines = { { { "---" .. i .. string.rep("-", 1000), "DiffText" } } },
+      virt_lines = {
+        { { "───" .. i .. string.rep("─", 1000) } },
+      },
       virt_lines_above = true,
     })
 
-    local name = (buff == buffers.current) and "current" or "incoming"
     vim.api.nvim_buf_set_extmark(buff, namespace, line + len - 1, 0, {
       virt_lines = {
-        { { "---" .. name .. string.rep("-", 1000), "DiffText" } },
+        { { string.rep("─", 1000) } },
       },
       virt_lines_above = false,
     })
