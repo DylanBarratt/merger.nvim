@@ -29,6 +29,15 @@ end
 
 --------------------------------------------------------------------------------
 
+---@param buffers Buffers
+local function setBuffersFiletype(buffers)
+  local baseFileType = vim.bo[buffers.startFile].filetype
+  vim.bo[buffers.base].filetype = baseFileType
+  vim.bo[buffers.current].filetype = baseFileType
+  vim.bo[buffers.incoming].filetype = baseFileType
+  vim.bo[buffers.startFile].filetype = baseFileType
+end
+
 ---@param buffNum number
 ---@return Conflict[]
 local function searchBuffer(buffNum)
@@ -392,14 +401,6 @@ end
 --------------------------------------------------------------------------------
 
 function Main()
-  ---@type Buffers
-  local buffers = {
-    current = vim.api.nvim_create_buf(false, true),
-    incoming = vim.api.nvim_create_buf(false, true),
-    base = vim.api.nvim_create_buf(false, true),
-    startFile = vim.api.nvim_get_current_buf(),
-  }
-
   local namespace = vim.api.nvim_create_namespace("Merger")
 
   local startFileName = vim.fn.expand("%:t")
@@ -411,6 +412,16 @@ function Main()
     print("Merger.nvim error: git repo not found")
     return
   end
+
+  ---@type Buffers
+  local buffers = {
+    current = vim.api.nvim_create_buf(false, true),
+    incoming = vim.api.nvim_create_buf(false, true),
+    base = vim.api.nvim_create_buf(false, true),
+    startFile = vim.api.nvim_get_current_buf(),
+  }
+
+  setBuffersFiletype(buffers)
 
   populateBuffers(startFileName, gitDir, buffers)
 

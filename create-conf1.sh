@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+rm -rf conf
+
 mkdir conf
 cd conf || exit 0
 git init
