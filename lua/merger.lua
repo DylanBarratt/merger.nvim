@@ -428,18 +428,27 @@ local function navigation(conflicts, windows)
   end, { desc = "previous conflict" })
 end
 
+---@param buffers Buffers
+local function saveBase(buffers)
+  vim.api.nvim_buf_set_lines(
+    buffers.startFile,
+    0,
+    -1,
+    false,
+    vim.api.nvim_buf_get_lines(buffers.base, 0, -1, false)
+  )
+end
+
 ---@param windows Windows
 ---@param cursorAutoCmd number
 ---@param buffers Buffers
 local function cleanup(windows, cursorAutoCmd, buffers)
-  -- cleanup when one win closes
+  -- cleanup all when one win closes
   vim.api.nvim_create_autocmd("WinClosed", {
     callback = function(event)
       local wins = valuesOnly(windows)
       if vim.tbl_contains(wins, tonumber(event.match)) then
-        -- TODO: save final base state
-        vim.print(vim.api.nvim_buf_get_lines(buffers.base, 0, -1, false))
-
+        saveBase(buffers)
         vim.api.nvim_del_autocmd(cursorAutoCmd)
 
         for _, win_id in ipairs(wins) do

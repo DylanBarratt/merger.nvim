@@ -8,7 +8,6 @@
 
 ## TODO
 - change line above to show which is current conflict
-- replace original file with base contents
 - label base with which change has been chosen
     - incoming
     - current
