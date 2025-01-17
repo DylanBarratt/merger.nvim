@@ -14,7 +14,7 @@
 ---@field base number
 
 ---@class Conflict
----@field lineNum number
+---@field lineNum number 0 indexed
 ---@field incoming string[]
 ---@field current string[]
 ---@field base string[]
@@ -65,7 +65,7 @@ local function searchBuffer(buffNum)
       -- New conflict found
       if curPart == "none" then
         table.insert(conflicts, { lineNum = relativeLineNum })
-        relativeLineNum = relativeLineNum + 1
+        relativeLineNum = relativeLineNum + 2
       end
 
       curPart = "current"
@@ -77,6 +77,7 @@ local function searchBuffer(buffNum)
       curPart = "none"
     else
       if curPart ~= "none" then
+        -- save conflict section inner parts
         if conflicts[#conflicts][curPart] == nil then
           conflicts[#conflicts][curPart] = { curLine }
         else
