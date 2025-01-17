@@ -32,6 +32,11 @@ local function valuesOnly(tbl)
 end
 
 --------------------------------------------------------------------------------
+--- CONSTANTS
+local INCOMING_INFO = " Incoming"
+local CURRENT_INFO = " Current"
+
+--------------------------------------------------------------------------------
 
 ---@param buffers Buffers
 local function setBuffersFiletype(buffers)
@@ -40,6 +45,26 @@ local function setBuffersFiletype(buffers)
   vim.bo[buffers.current].filetype = baseFileType
   vim.bo[buffers.incoming].filetype = baseFileType
   vim.bo[buffers.startFile].filetype = baseFileType
+end
+
+---@param buffers Buffers
+---@param conflicts Conflict[]
+---@param index number
+local function setInfoLine(buffers, conflicts, index)
+  vim.api.nvim_buf_set_lines(
+    buffers.currentInfo,
+    0,
+    -1,
+    false,
+    { string.format("%s !(%d/%d)", CURRENT_INFO, index, #conflicts) }
+  )
+  vim.api.nvim_buf_set_lines(
+    buffers.incomingInfo,
+    0,
+    -1,
+    false,
+    { string.format("%s !(%d/%d)", INCOMING_INFO, index, #conflicts) }
+  )
 end
 
 ---@param buffNum number
@@ -176,9 +201,6 @@ local function populateBuffers(fileName, gitDir, buffers)
   local function setBuf(bufNr, content)
     vim.api.nvim_buf_set_lines(bufNr, 0, -1, false, content)
   end
-
-  setBuf(buffers.currentInfo, { " Current" })
-  setBuf(buffers.incomingInfo, { " Incoming" })
 
   setBuf(
     buffers.base,
@@ -379,11 +401,13 @@ end
 
 ---@param conflicts Conflict[]
 ---@param windows Windows
-local function navigation(conflicts, windows)
-  ---@return Conflict
+---@param buffers Buffers
+local function navigation(conflicts, windows, buffers)
+  ---@return { conflict: Conflict, index: number }
   local function find_next_conflict()
     ---@type Conflict
     local next_conflict = nil
+    local index = 1
 
     for i = 1, #conflicts, 1 do
       if
@@ -391,16 +415,19 @@ local function navigation(conflicts, windows)
         and (not next_conflict or conflicts[i].lineNum < next_conflict.lineNum)
       then
         next_conflict = conflicts[i]
+        index = i
       end
     end
 
-    return next_conflict == nil and conflicts[1] or next_conflict
+    return next_conflict == nil and { conflict = conflicts[1], index = index }
+      or { conflict = next_conflict, index = index }
   end
 
-  ---@return Conflict
+  ---@return { conflict: Conflict, index: number }
   local function find_prev_conflict()
     ---@type Conflict
     local prev_conflict = nil
+    local index = #conflicts
 
     for i = 1, #conflicts, 1 do
       if
@@ -408,23 +435,28 @@ local function navigation(conflicts, windows)
         and (not prev_conflict or conflicts[i].lineNum > prev_conflict.lineNum)
       then
         prev_conflict = conflicts[i]
+        index = i
       end
     end
 
-    return prev_conflict == nil and conflicts[#conflicts] or prev_conflict
+    return prev_conflict == nil
+        and { conflict = conflicts[#conflicts], index = index }
+      or { conflict = prev_conflict, index = index }
   end
 
   vim.keymap.set("n", "]c", function()
+    local nextConflict = find_next_conflict()
+    setInfoLine(buffers, conflicts, nextConflict.index)
     vim.api.nvim_win_set_cursor(
       windows.base,
-      { find_next_conflict().lineNum + 1, 0 }
+      { nextConflict.conflict.lineNum + 1, 0 }
     )
   end, { desc = "next conflict" })
+
   vim.keymap.set("n", "[c", function()
-    vim.api.nvim_win_set_cursor(
-      windows.base,
-      { find_prev_conflict().lineNum + 1, 0 }
-    )
+    local prevConflict = find_prev_conflict()
+    setInfoLine(buffers, conflicts, prevConflict.index)
+    vim.api.nvim_win_set_cursor(windows.base, { prevConflict.conflict.lineNum + 1, 0 })
   end, { desc = "previous conflict" })
 end
 
@@ -492,6 +524,8 @@ function Main()
 
   local conflicts = searchBuffer(buffers.startFile)
 
+  setInfoLine(buffers, conflicts, 1)
+
   local windows = createWindows(buffers)
 
   -- set the cursor to the first conflict
@@ -505,7 +539,7 @@ function Main()
 
   userCommands(buffers, conflicts)
 
-  navigation(conflicts, windows)
+  navigation(conflicts, windows, buffers)
 
   cleanup(windows, cursorAutoCmd, buffers)
 end
