@@ -234,11 +234,11 @@ local function highlightDiffs(namespace, buffers, windows, conflicts)
   --   end
   -- end
 
-  local function linesAround(buff, line, len, i)
+  local function linesAround(buff, line, len, confIndex)
     -- HACK: repeat 1000 so that dashes always fill window
     vim.api.nvim_buf_set_extmark(buff, namespace, line, 0, {
       virt_lines = {
-        { { "───" .. i .. string.rep("─", 1000) } },
+        { { "───" .. confIndex .. string.rep("─", 1000) } },
       },
       virt_lines_above = true,
     })
@@ -251,21 +251,13 @@ local function highlightDiffs(namespace, buffers, windows, conflicts)
     })
   end
 
-  local function highlightChar(line, char)
+  local function highlightChar(buff, line, char)
     vim.api.nvim_buf_add_highlight(
-      buffers.incoming,
+      buff,
       namespace,
       "DiffAdd",
-      line - 1,
-      char - 1,
-      char
-    )
-    vim.api.nvim_buf_add_highlight(
-      buffers.current,
-      namespace,
-      "DiffAdd",
-      line - 1,
-      char - 1,
+      line - 1, -- match 0 indexing
+      char - 1, -- match 0 indexing
       char
     )
   end
@@ -294,29 +286,52 @@ local function highlightDiffs(namespace, buffers, windows, conflicts)
     end
 
     -- highlight character diffs
-    for curLine = 1, math.max(#conflicts[curConf].current, #conflicts[curConf].incoming) do
-      local line1 = conflicts[curConf].current[curLine] or ""
-      local line2 = conflicts[curConf].incoming[curLine] or ""
+    for curLineI = 1, math.max(#conflicts[curConf].current, #conflicts[curConf].incoming) do
+      local baseLine = conflicts[curConf].base[curLineI] or ""
+      local currentLine = conflicts[curConf].current[curLineI] or ""
+      local incomingLine = conflicts[curConf].incoming[curLineI] or ""
 
-      if line1 == "" and line2 == "" then
-        goto continue
-      end
+      -- highlight the differences for this line to base
+      for curChar = 1, #baseLine do
+        local baseLineChar = baseLine:sub(curChar, curChar)
+        local currentLineChar = currentLine:sub(curChar, curChar)
+        local incomingLineChar = incomingLine:sub(curChar, curChar)
 
-      for curChar = 1, math.max(#line1, #line2) do
-        local char1 = line1:sub(curChar, curChar)
-        local char2 = line2:sub(curChar, curChar)
-
-        if char1 ~= char2 then
-          if curChar <= #line1 then
-            highlightChar(conflicts[curConf].lineNum + curLine, curChar)
-          end
-          if curChar <= #line2 then
-            highlightChar(conflicts[curConf].lineNum + curLine, curChar)
-          end
+        if currentLineChar ~= baseLineChar then
+          highlightChar(
+            buffers.current,
+            conflicts[curConf].lineNum + curLineI,
+            curChar
+          )
+        end
+        if incomingLineChar ~= baseLineChar then
+          highlightChar(
+            buffers.incoming,
+            conflicts[curConf].lineNum + curLineI,
+            curChar
+          )
         end
       end
 
-      ::continue::
+      -- highlight all remaining characters
+      if #currentLine > #baseLine then
+        for i = #baseLine, #currentLine, 1 do
+          highlightChar(
+            buffers.current,
+            conflicts[curConf].lineNum + curLineI,
+            i
+          )
+        end
+      end
+      if #incomingLine > #baseLine then
+        for i = #baseLine, #incomingLine, 1 do
+          highlightChar(
+            buffers.incoming,
+            conflicts[curConf].lineNum + curLineI,
+            i
+          )
+        end
+      end
     end
   end
 end
