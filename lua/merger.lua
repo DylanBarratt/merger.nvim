@@ -190,7 +190,7 @@ local function populateBuffers(fileName, gitDir, buffers)
   local function setBuf(bufNr, content)
     -- HACK: this has the potential to remove user added empty end lines?
     if content[#content] == "" then
-      content = {unpack(content, 1, #content - 1)}
+      content = { unpack(content, 1, #content - 1) }
     end
 
     vim.api.nvim_buf_set_lines(bufNr, 0, -1, false, content)
@@ -478,8 +478,17 @@ local function cleanup(windows, cursorAutoCmd, buffers)
       local wins = valuesOnly(windows)
       if vim.tbl_contains(wins, tonumber(event.match)) then
         saveBase(buffers)
+
         vim.api.nvim_del_autocmd(cursorAutoCmd)
 
+        -- reset user command
+        vim.api.nvim_create_user_command(
+          "Merger",
+          Main,
+          { desc = "Git Mergetool" }
+        )
+
+        -- close other merger windows
         for _, win_id in ipairs(wins) do
           if vim.api.nvim_win_is_valid(win_id) then
             vim.api.nvim_win_close(win_id, true)
