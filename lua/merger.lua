@@ -32,11 +32,6 @@ local function valuesOnly(tbl)
 end
 
 --------------------------------------------------------------------------------
---- CONSTANTS
-local INCOMING_INFO = " Incoming"
-local CURRENT_INFO = " Current"
-
---------------------------------------------------------------------------------
 
 ---@param buffers Buffers
 local function setBuffersFiletype(buffers)
@@ -52,19 +47,13 @@ end
 ---@param index number
 local function setInfoLine(buffers, conflicts, index)
   vim.api.nvim_buf_set_lines(
-    buffers.currentInfo,
-    0,
-    -1,
-    false,
-    { string.format("%s !(%d/%d)", CURRENT_INFO, index, #conflicts) }
-  )
-  vim.api.nvim_buf_set_lines(
     buffers.incomingInfo,
     0,
     -1,
     false,
-    { string.format("%s !(%d/%d)", INCOMING_INFO, index, #conflicts) }
+    { string.format(" !(%d/%d) | Incoming", index, #conflicts) }
   )
+  vim.api.nvim_buf_set_lines(buffers.currentInfo, 0, -1, false, { " Current" })
 end
 
 ---@param buffNum number
@@ -456,7 +445,10 @@ local function navigation(conflicts, windows, buffers)
   vim.keymap.set("n", "[c", function()
     local prevConflict = find_prev_conflict()
     setInfoLine(buffers, conflicts, prevConflict.index)
-    vim.api.nvim_win_set_cursor(windows.base, { prevConflict.conflict.lineNum + 1, 0 })
+    vim.api.nvim_win_set_cursor(
+      windows.base,
+      { prevConflict.conflict.lineNum + 1, 0 }
+    )
   end, { desc = "previous conflict" })
 end
 

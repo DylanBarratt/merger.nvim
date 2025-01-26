@@ -7,6 +7,9 @@
 ## Options
 
 ## TODO
+- BUG: adds empty line at end?
+- BUG: command should go back ot default on exit
+
 - change line above to show which is current conflict
 - label base with which change has been chosen
     - incoming
