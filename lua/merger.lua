@@ -229,8 +229,14 @@ local function populateBuffers(fileName, gitDir, buffers)
 end
 
 ---@param windows Windows
+---@param firstConfLine number
 ---@return number
-local function syncCursors(windows)
+local function syncCursors(windows, firstConfLine)
+  -- set the cursor to the first conflict
+  vim.api.nvim_win_set_cursor(windows.base, { firstConfLine + 1, 0 })
+  vim.api.nvim_win_set_cursor(windows.incoming, { firstConfLine + 1, 0 })
+  vim.api.nvim_win_set_cursor(windows.current, { firstConfLine + 1, 0 })
+
   return vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
     callback = function()
       local cursor_pos = vim.api.nvim_win_get_cursor(windows.base)
@@ -566,12 +572,7 @@ function Main()
 
   local windows = createWindows(buffers)
 
-  -- set the cursor to the first conflict
-  vim.api.nvim_win_set_cursor(windows.base, { conflicts[1].lineNum + 1, 0 })
-  vim.api.nvim_win_set_cursor(windows.incoming, { conflicts[1].lineNum + 1, 0 })
-  vim.api.nvim_win_set_cursor(windows.current, { conflicts[1].lineNum + 1, 0 })
-
-  local cursorAutoCmd = syncCursors(windows)
+  local cursorAutoCmd = syncCursors(windows, conflicts[1].lineNum)
 
   local extmarkIds = highlightDiffs(namespace, buffers, windows, conflicts)
 
