@@ -188,6 +188,11 @@ end
 ---@param buffers Buffers
 local function populateBuffers(fileName, gitDir, buffers)
   local function setBuf(bufNr, content)
+    -- HACK: this has the potential to remove user added empty end lines?
+    if content[#content] == "" then
+      content = {unpack(content, 1, #content - 1)}
+    end
+
     vim.api.nvim_buf_set_lines(bufNr, 0, -1, false, content)
   end
 
