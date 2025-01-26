@@ -11,7 +11,6 @@
     FIX: catch this and handle with command quit and error
     FIX?: be able to deal with this?
 
-- change line above to show which is current conflict
 - label base with which change has been chosen
     - incoming
     - current

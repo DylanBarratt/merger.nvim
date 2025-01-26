@@ -1,3 +1,6 @@
+--------------------------------------------------------------------------------
+-- TYPES
+
 ---@class Buffers
 ---@field current number
 ---@field currentInfo number
@@ -18,6 +21,12 @@
 ---@field incoming string[]
 ---@field current string[]
 ---@field base string[]
+
+---@class ExtmarkId
+---@field incomingTop number
+---@field incomingBot number
+---@field currentTop number
+---@field currentBot number
 
 --------------------------------------------------------------------------------
 -- HELPER FUNCTIONS
@@ -236,6 +245,7 @@ end
 ---@param buffers Buffers
 ---@param windows Windows
 ---@param conflicts Conflict[]
+---@return ExtmarkId[]
 local function highlightDiffs(namespace, buffers, windows, conflicts)
   -- highlight whole section
   -- local function highlightLine(buff, line)
@@ -250,20 +260,28 @@ local function highlightDiffs(namespace, buffers, windows, conflicts)
   --   end
   -- end
 
-  local function linesAround(buff, line, len, confIndex)
+  local function linesAround(buff, line, len, confIndex, idTop, idBot)
     -- HACK: repeat 1000 so that dashes always fill window
     vim.api.nvim_buf_set_extmark(buff, namespace, line, 0, {
       virt_lines = {
         { { "───" .. confIndex .. string.rep("─", 1000) } },
       },
       virt_lines_above = true,
+      id = idTop,
     })
 
     vim.api.nvim_buf_set_extmark(buff, namespace, line + len - 1, 0, {
       virt_lines = {
-        { { string.rep("─", 1000) } },
+        {
+          {
+            -- check if this is the first conflict and mark if true
+            ((idBot == 2 or idBot == 4) and "───" .. "+" or "")
+              .. string.rep("─", 1000),
+          },
+        },
       },
       virt_lines_above = false,
+      id = idBot,
     })
   end
 
@@ -278,18 +296,33 @@ local function highlightDiffs(namespace, buffers, windows, conflicts)
     )
   end
 
+  local extmarkIds = {}
+
   for curConf = 1, #conflicts do
-    linesAround(
-      buffers.current,
-      conflicts[curConf].lineNum,
-      #conflicts[curConf].current,
-      curConf
-    )
+    ---@type ExtmarkId
+    local curExtmarkIds = {
+      incomingTop = (#extmarkIds * 4) + 1,
+      incomingBot = (#extmarkIds * 4) + 2,
+      currentTop = (#extmarkIds * 4) + 3,
+      currentBot = (#extmarkIds * 4) + 4,
+    }
+    table.insert(extmarkIds, curExtmarkIds)
+
     linesAround(
       buffers.incoming,
       conflicts[curConf].lineNum,
       #conflicts[curConf].incoming,
-      curConf
+      curConf,
+      curExtmarkIds.incomingTop,
+      curExtmarkIds.incomingBot
+    )
+    linesAround(
+      buffers.current,
+      conflicts[curConf].lineNum,
+      #conflicts[curConf].current,
+      curConf,
+      curExtmarkIds.currentTop,
+      curExtmarkIds.currentBot
     )
 
     -- HACK: virtual lines on line 0 are hidden without this :/
@@ -350,6 +383,8 @@ local function highlightDiffs(namespace, buffers, windows, conflicts)
       end
     end
   end
+
+  return extmarkIds
 end
 
 ---@param buffers Buffers
@@ -393,67 +428,64 @@ local function userCommands(buffers, conflicts)
   })
 end
 
+---@param namespace number
 ---@param conflicts Conflict[]
 ---@param windows Windows
 ---@param buffers Buffers
-local function navigation(conflicts, windows, buffers)
-  ---@return { conflict: Conflict, index: number }
-  local function find_next_conflict()
-    ---@type Conflict
-    local next_conflict = nil
-    local index = 1
+---@param extmarkIds ExtmarkId[]
+local function navigation(namespace, conflicts, windows, buffers, extmarkIds)
+  local curConf = 1
+  local lastConf = -1
 
-    for i = 1, #conflicts, 1 do
-      if
-        conflicts[i].lineNum > vim.api.nvim_win_get_cursor(0)[1] - 1
-        and (not next_conflict or conflicts[i].lineNum < next_conflict.lineNum)
-      then
-        next_conflict = conflicts[i]
-        index = i
-      end
+  local function updateNavInfo()
+    ---@param type "current" | "incoming"
+    ---@param clear boolean
+    local function setBotLine(type, clear)
+      local index = clear and lastConf or curConf
+      vim.api.nvim_buf_set_extmark(
+        buffers[type],
+        namespace,
+        conflicts[index].lineNum + #conflicts[index][type] - 1,
+        0,
+        {
+          id = extmarkIds[index][type .. "Bot"],
+          virt_lines_above = false,
+          virt_lines = {
+            {
+              {
+                (clear and "" or "───" .. "+") .. string.rep("─", 1000),
+              },
+            },
+          },
+        }
+      )
     end
 
-    return next_conflict == nil and { conflict = conflicts[1], index = index }
-      or { conflict = next_conflict, index = index }
-  end
+    local nextConflict = conflicts[curConf]
 
-  ---@return { conflict: Conflict, index: number }
-  local function find_prev_conflict()
-    ---@type Conflict
-    local prev_conflict = nil
-    local index = #conflicts
+    setInfoLine(buffers, conflicts, curConf)
 
-    for i = 1, #conflicts, 1 do
-      if
-        conflicts[i].lineNum < vim.api.nvim_win_get_cursor(0)[1] - 1
-        and (not prev_conflict or conflicts[i].lineNum > prev_conflict.lineNum)
-      then
-        prev_conflict = conflicts[i]
-        index = i
-      end
-    end
+    -- clear old border
+    setBotLine("incoming", true)
+    setBotLine("current", true)
 
-    return prev_conflict == nil
-        and { conflict = conflicts[#conflicts], index = index }
-      or { conflict = prev_conflict, index = index }
+    -- update new border
+    setBotLine("incoming", false)
+    setBotLine("current", false)
+
+    vim.api.nvim_win_set_cursor(windows.base, { nextConflict.lineNum + 1, 0 })
   end
 
   vim.keymap.set("n", "]c", function()
-    local nextConflict = find_next_conflict()
-    setInfoLine(buffers, conflicts, nextConflict.index)
-    vim.api.nvim_win_set_cursor(
-      windows.base,
-      { nextConflict.conflict.lineNum + 1, 0 }
-    )
+    lastConf = curConf
+    curConf = curConf < #conflicts and curConf + 1 or 1
+    updateNavInfo()
   end, { desc = "next conflict" })
 
   vim.keymap.set("n", "[c", function()
-    local prevConflict = find_prev_conflict()
-    setInfoLine(buffers, conflicts, prevConflict.index)
-    vim.api.nvim_win_set_cursor(
-      windows.base,
-      { prevConflict.conflict.lineNum + 1, 0 }
-    )
+    lastConf = curConf
+    curConf = curConf > 1 and curConf - 1 or #conflicts
+    updateNavInfo()
   end, { desc = "previous conflict" })
 end
 
@@ -541,11 +573,11 @@ function Main()
 
   local cursorAutoCmd = syncCursors(windows)
 
-  highlightDiffs(namespace, buffers, windows, conflicts)
+  local extmarkIds = highlightDiffs(namespace, buffers, windows, conflicts)
 
   userCommands(buffers, conflicts)
 
-  navigation(conflicts, windows, buffers)
+  navigation(namespace, conflicts, windows, buffers, extmarkIds)
 
   cleanup(windows, cursorAutoCmd, buffers)
 end
