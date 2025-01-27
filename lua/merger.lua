@@ -247,15 +247,15 @@ local function syncCursors(windows, firstConfLine)
   })
 end
 
----@param namespace number
+---@param ns number
 ---@param buffers Buffers
 ---@param windows Windows
 ---@param conflicts Conflict[]
 ---@return ExtmarkId[]
-local function highlightDiffs(namespace, buffers, windows, conflicts)
+local function highlightDiffs(ns, buffers, windows, conflicts)
   -- highlight whole section
   -- local function highlightLine(buff, line)
-  --   vim.api.nvim_buf_add_highlight(buff, namespace, "Visual", line, 0, -1)
+  --   vim.api.nvim_buf_add_highlight(buff, ns, "Visual", line, 0, -1)
   -- end
   --
   -- for x = 1, #conflicts do
@@ -266,9 +266,20 @@ local function highlightDiffs(namespace, buffers, windows, conflicts)
   --   end
   -- end
 
+  -- local function highlightChar(buff, line, char)
+  --   vim.api.nvim_buf_add_highlight(
+  --     buff,
+  --     ns,
+  --     "DiffAdd",
+  --     line - 1, -- match 0 indexing
+  --     char - 1, -- match 0 indexing
+  --     char
+  --   )
+  -- end
+
   local function linesAround(buff, line, len, confIndex, idTop, idBot)
     -- HACK: repeat 1000 so that dashes always fill window
-    vim.api.nvim_buf_set_extmark(buff, namespace, line, 0, {
+    vim.api.nvim_buf_set_extmark(buff, ns, line, 0, {
       virt_lines = {
         { { "───" .. confIndex .. string.rep("─", 1000) } },
       },
@@ -276,7 +287,7 @@ local function highlightDiffs(namespace, buffers, windows, conflicts)
       id = idTop,
     })
 
-    vim.api.nvim_buf_set_extmark(buff, namespace, line + len - 1, 0, {
+    vim.api.nvim_buf_set_extmark(buff, ns, line + len - 1, 0, {
       virt_lines = {
         {
           {
@@ -291,15 +302,10 @@ local function highlightDiffs(namespace, buffers, windows, conflicts)
     })
   end
 
-  local function highlightChar(buff, line, char)
-    vim.api.nvim_buf_add_highlight(
-      buff,
-      namespace,
-      "DiffAdd",
-      line - 1, -- match 0 indexing
-      char - 1, -- match 0 indexing
-      char
-    )
+  ---@param buff "current" | "incoming"
+  ---@param line number
+  local function highlightLine(buff, line)
+    vim.api.nvim_buf_add_highlight(buffers[buff], ns, "DiffAdd", line, 0, -1)
   end
 
   local extmarkIds = {}
@@ -340,52 +346,19 @@ local function highlightDiffs(namespace, buffers, windows, conflicts)
       vim.api.nvim_set_current_win(windows.base)
     end
 
-    -- highlight character diffs
-    for curLineI = 1, math.max(#conflicts[curConf].current, #conflicts[curConf].incoming) do
-      local baseLine = conflicts[curConf].base[curLineI] or ""
-      local currentLine = conflicts[curConf].current[curLineI] or ""
-      local incomingLine = conflicts[curConf].incoming[curLineI] or ""
+    -- highlight different lines
+    for lineI = 1, math.max(#conflicts[curConf].current, #conflicts[curConf].incoming) do
+      local lines = {
+        base = conflicts[curConf].base[lineI] or "",
+        current = conflicts[curConf].current[lineI] or "",
+        incoming = conflicts[curConf].incoming[lineI] or "",
+      }
 
-      -- highlight the differences for this line to base
-      for curChar = 1, #baseLine do
-        local baseLineChar = baseLine:sub(curChar, curChar)
-        local currentLineChar = currentLine:sub(curChar, curChar)
-        local incomingLineChar = incomingLine:sub(curChar, curChar)
-
-        if currentLineChar ~= baseLineChar then
-          highlightChar(
-            buffers.current,
-            conflicts[curConf].lineNum + curLineI,
-            curChar
-          )
-        end
-        if incomingLineChar ~= baseLineChar then
-          highlightChar(
-            buffers.incoming,
-            conflicts[curConf].lineNum + curLineI,
-            curChar
-          )
-        end
+      if lines.base ~= lines["current"] then
+        highlightLine("current", lineI - 1) -- 0 based
       end
-
-      -- highlight all remaining characters
-      if #currentLine > #baseLine then
-        for i = #baseLine, #currentLine, 1 do
-          highlightChar(
-            buffers.current,
-            conflicts[curConf].lineNum + curLineI,
-            i
-          )
-        end
-      end
-      if #incomingLine > #baseLine then
-        for i = #baseLine, #incomingLine, 1 do
-          highlightChar(
-            buffers.incoming,
-            conflicts[curConf].lineNum + curLineI,
-            i
-          )
-        end
+      if lines.base ~= lines["incoming"] then
+        highlightLine("incoming", lineI - 1) -- 0 based
       end
     end
   end
@@ -434,12 +407,12 @@ local function userCommands(buffers, conflicts)
   })
 end
 
----@param namespace number
+---@param ns number
 ---@param conflicts Conflict[]
 ---@param windows Windows
 ---@param buffers Buffers
 ---@param extmarkIds ExtmarkId[]
-local function navigation(namespace, conflicts, windows, buffers, extmarkIds)
+local function navigation(ns, conflicts, windows, buffers, extmarkIds)
   local curConf = 1
   local lastConf = -1
 
@@ -450,7 +423,7 @@ local function navigation(namespace, conflicts, windows, buffers, extmarkIds)
       local index = clear and lastConf or curConf
       vim.api.nvim_buf_set_extmark(
         buffers[type],
-        namespace,
+        ns,
         conflicts[index].lineNum + #conflicts[index][type] - 1,
         0,
         {
@@ -540,7 +513,7 @@ end
 --------------------------------------------------------------------------------
 
 function Main()
-  local namespace = vim.api.nvim_create_namespace("Merger")
+  local ns = vim.api.nvim_create_namespace("Merger")
 
   local gitDir = vim.fn
     .system("git -C " .. vim.fn.expand("%:p:h") .. " rev-parse --show-toplevel")
@@ -575,11 +548,11 @@ function Main()
 
   local cursorAutoCmd = syncCursors(windows, conflicts[1].lineNum)
 
-  local extmarkIds = highlightDiffs(namespace, buffers, windows, conflicts)
+  local extmarkIds = highlightDiffs(ns, buffers, windows, conflicts)
 
   userCommands(buffers, conflicts)
 
-  navigation(namespace, conflicts, windows, buffers, extmarkIds)
+  navigation(ns, conflicts, windows, buffers, extmarkIds)
 
   cleanup(windows, cursorAutoCmd, buffers)
 end
