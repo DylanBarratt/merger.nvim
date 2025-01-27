@@ -253,30 +253,6 @@ end
 ---@param conflicts Conflict[]
 ---@return ExtmarkId[]
 local function highlightDiffs(ns, buffers, windows, conflicts)
-  -- highlight whole section
-  -- local function highlightLine(buff, line)
-  --   vim.api.nvim_buf_add_highlight(buff, ns, "Visual", line, 0, -1)
-  -- end
-  --
-  -- for x = 1, #conflicts do
-  --   for i = 0, #conflicts[x].incoming do
-  --     highlightLine(buffers.base, conflicts[x].lineNum + i)
-  --     highlightLine(buffers.incoming, conflicts[x].lineNum + i)
-  --     highlightLine(buffers.current, conflicts[x].lineNum + i)
-  --   end
-  -- end
-
-  -- local function highlightChar(buff, line, char)
-  --   vim.api.nvim_buf_add_highlight(
-  --     buff,
-  --     ns,
-  --     "DiffAdd",
-  --     line - 1, -- match 0 indexing
-  --     char - 1, -- match 0 indexing
-  --     char
-  --   )
-  -- end
-
   local function linesAround(buff, line, len, confIndex, idTop, idBot)
     -- HACK: repeat 1000 so that dashes always fill window
     vim.api.nvim_buf_set_extmark(buff, ns, line, 0, {
