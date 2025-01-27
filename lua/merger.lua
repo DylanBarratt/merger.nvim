@@ -542,7 +542,6 @@ end
 function Main()
   local namespace = vim.api.nvim_create_namespace("Merger")
 
-  local startFileName = vim.fn.expand("%:t")
   local gitDir = vim.fn
     .system("git -C " .. vim.fn.expand("%:p:h") .. " rev-parse --show-toplevel")
     :gsub("\n", "")
@@ -551,6 +550,8 @@ function Main()
     print("Merger.nvim error: git repo not found")
     return
   end
+
+  local startFileName = string.sub(vim.fn.expand("%:p"), #gitDir + 2)
 
   ---@type Buffers
   local buffers = {
