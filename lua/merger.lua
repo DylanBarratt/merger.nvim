@@ -29,6 +29,12 @@
 ---@field currentBot number
 
 --------------------------------------------------------------------------------
+-- CONSTANTS
+
+local CONFLICT_DASH = "┈"
+local SELECTED_CONFLICT_DASH = "—"
+
+--------------------------------------------------------------------------------
 -- HELPER FUNCTIONS
 
 ---@return table
@@ -38,6 +44,42 @@ local function valuesOnly(tbl)
     table.insert(values_only, value)
   end
   return values_only
+end
+
+---@param ns number
+---@param buff number
+---@param line number
+---@param len number
+---@param idTop number
+---@param idBot number
+---@param selected boolean
+local function linesAround(ns, buff, line, len, idTop, idBot, selected)
+  -- HACK: repeat 1000 so that dashes always fill window
+  vim.api.nvim_buf_set_extmark(buff, ns, line, 0, {
+    virt_lines = {
+      {
+        {
+          selected and string.rep(SELECTED_CONFLICT_DASH, 1000)
+            or string.rep(CONFLICT_DASH, 1000),
+        },
+      },
+    },
+    virt_lines_above = true,
+    id = idTop,
+  })
+
+  vim.api.nvim_buf_set_extmark(buff, ns, line + len - 1, 0, {
+    virt_lines = {
+      {
+        {
+          selected and string.rep(SELECTED_CONFLICT_DASH, 1000)
+            or string.rep(CONFLICT_DASH, 1000),
+        },
+      },
+    },
+    virt_lines_above = false,
+    id = idBot,
+  })
 end
 
 --------------------------------------------------------------------------------
@@ -253,31 +295,6 @@ end
 ---@param conflicts Conflict[]
 ---@return ExtmarkId[]
 local function highlightDiffs(ns, buffers, windows, conflicts)
-  local function linesAround(buff, line, len, confIndex, idTop, idBot)
-    -- HACK: repeat 1000 so that dashes always fill window
-    vim.api.nvim_buf_set_extmark(buff, ns, line, 0, {
-      virt_lines = {
-        { { "───" .. confIndex .. string.rep("─", 1000) } },
-      },
-      virt_lines_above = true,
-      id = idTop,
-    })
-
-    vim.api.nvim_buf_set_extmark(buff, ns, line + len - 1, 0, {
-      virt_lines = {
-        {
-          {
-            -- check if this is the first conflict and mark if true
-            ((idBot == 2 or idBot == 4) and "───" .. "+" or "")
-              .. string.rep("─", 1000),
-          },
-        },
-      },
-      virt_lines_above = false,
-      id = idBot,
-    })
-  end
-
   ---@param buff "current" | "incoming"
   ---@param line number
   local function highlightLine(buff, line)
@@ -297,20 +314,22 @@ local function highlightDiffs(ns, buffers, windows, conflicts)
     table.insert(extmarkIds, curExtmarkIds)
 
     linesAround(
+      ns,
       buffers.incoming,
       conflicts[curConf].lineNum,
       #conflicts[curConf].incoming,
-      curConf,
       curExtmarkIds.incomingTop,
-      curExtmarkIds.incomingBot
+      curExtmarkIds.incomingBot,
+      curConf == 1 and true or false
     )
     linesAround(
+      ns,
       buffers.current,
       conflicts[curConf].lineNum,
       #conflicts[curConf].current,
-      curConf,
       curExtmarkIds.currentTop,
-      curExtmarkIds.currentBot
+      curExtmarkIds.currentBot,
+      curConf == 1 and true or false
     )
 
     -- HACK: virtual lines on line 0 are hidden without this :/
@@ -394,25 +413,24 @@ local function navigation(ns, conflicts, windows, buffers, extmarkIds)
 
   local function updateNavInfo()
     ---@param type "current" | "incoming"
-    ---@param clear boolean
-    local function setBotLine(type, clear)
-      local index = clear and lastConf or curConf
-      vim.api.nvim_buf_set_extmark(
-        buffers[type],
+    local function setLinesAround(type)
+      linesAround(
         ns,
-        conflicts[index].lineNum + #conflicts[index][type] - 1,
-        0,
-        {
-          id = extmarkIds[index][type .. "Bot"],
-          virt_lines_above = false,
-          virt_lines = {
-            {
-              {
-                (clear and "" or "───" .. "+") .. string.rep("─", 1000),
-              },
-            },
-          },
-        }
+        buffers[type],
+        conflicts[curConf].lineNum,
+        #conflicts[curConf][type],
+        extmarkIds[curConf][type .. "Top"],
+        extmarkIds[curConf][type .. "Bot"],
+        true
+      )
+      linesAround(
+        ns,
+        buffers[type],
+        conflicts[lastConf].lineNum,
+        #conflicts[lastConf][type],
+        extmarkIds[lastConf][type .. "Top"],
+        extmarkIds[lastConf][type .. "Bot"],
+        false
       )
     end
 
@@ -420,13 +438,8 @@ local function navigation(ns, conflicts, windows, buffers, extmarkIds)
 
     setInfoLine(buffers, conflicts, curConf)
 
-    -- clear old border
-    setBotLine("incoming", true)
-    setBotLine("current", true)
-
-    -- update new border
-    setBotLine("incoming", false)
-    setBotLine("current", false)
+    setLinesAround("incoming")
+    setLinesAround("current")
 
     vim.api.nvim_win_set_cursor(windows.base, { nextConflict.lineNum + 1, 0 })
   end

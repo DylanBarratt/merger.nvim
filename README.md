@@ -22,4 +22,5 @@
 - user options
     - navigation keys
     - colours?
+    - conflict line around character
 
